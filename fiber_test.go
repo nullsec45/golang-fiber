@@ -1,12 +1,16 @@
 package main
 
 import (
+	_ "embed"
 	"github.com/gofiber/fiber/v2"
 	"testing"
 	"github.com/stretchr/testify/assert"
 	"net/http/httptest"
 	"io"
 	"net/http"
+	"strings"
+	"bytes"
+	"mime/multipart"
 )
 
 var app = fiber.New()
@@ -83,4 +87,58 @@ func TestRouteParameter(t *testing.T){
 	assert.Equal(t, 200, response.StatusCode)
 	bytes, err := io.ReadAll(response.Body)
 	assert.Equal(t, "Get Order 2 From User 1", string(bytes))
+}
+
+func TestFormRequest(t *testing.T) {
+	app.Post("/hello", func(ctx *fiber.Ctx) error  {
+		name := ctx.FormValue("name")
+		return ctx.SendString("Hello "+name)
+	})
+
+	body := strings.NewReader("name=Fajar")
+	request := 	httptest.NewRequest("POST", "/hello", body)
+	request.Header.Set("Content-Type","application/x-www-form-urlencoded")
+	response, err := app.Test(request)
+	assert.Nil(t, err)
+	assert.Equal(t,200,response.StatusCode)
+
+	bytes, err := io.ReadAll(response.Body)
+	assert.Nil(t, err)
+	assert.Equal(t, "Hello Fajar", string(bytes))
+}
+
+//go:embed source/contoh.txt
+var contohFile []byte
+
+func TestFormUpload(t *testing.T) {
+	app.Post("/upload", func(ctx *fiber.Ctx) error {
+		file, err := ctx.FormFile("file")
+
+		if err != nil {
+			return err
+		}
+
+		err = ctx.SaveFile(file, "./target/"+file.Filename)
+		if err != nil {
+			return err
+		}
+
+		return ctx.SendString("Upload Success")
+	})
+
+	body := new(bytes.Buffer)
+	writer := multipart.NewWriter(body)
+	file, _ := writer.CreateFormFile("file","contoh.txt")
+	file.Write(contohFile)
+	writer.Close()
+
+	request := httptest.NewRequest("POST","/upload", body)
+	request.Header.Set("Content-Type",writer.FormDataContentType())
+	response, err := app.Test(request)
+	assert.Nil(t, err)
+	assert.Equal(t, 200, response.StatusCode)
+
+	bytes, err := io.ReadAll(response.Body)
+	assert.Nil(t, err)
+	assert.Equal(t, "Upload Success", string(bytes))
 }
