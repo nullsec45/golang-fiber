@@ -11,6 +11,7 @@ import (
 	"strings"
 	"bytes"
 	"mime/multipart"
+	"encoding/json"
 )
 
 var app = fiber.New()
@@ -141,4 +142,104 @@ func TestFormUpload(t *testing.T) {
 	bytes, err := io.ReadAll(response.Body)
 	assert.Nil(t, err)
 	assert.Equal(t, "Upload Success", string(bytes))
+}
+
+type LoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func TestRequestBody(t *testing.T) {
+	app.Post("/login", func(ctx *fiber.Ctx) error  {
+		body := ctx.Body()
+
+		request := new(LoginRequest)
+		err := json.Unmarshal(body, request)
+
+		if err != nil {
+			return err
+		}
+
+		return ctx.SendString("Hello "+request.Username)
+	})
+
+	body := strings.NewReader(`{"username":"Fajar","password":"rahasia"}`)
+	request := 	httptest.NewRequest("POST", "/login", body)
+	request.Header.Set("Content-Type","application/json")
+	response, err := app.Test(request)
+	assert.Nil(t, err)
+	assert.Equal(t,200,response.StatusCode)
+
+	bytes, err := io.ReadAll(response.Body)
+	assert.Nil(t, err)
+	assert.Equal(t, "Hello Fajar", string(bytes))
+}
+
+type RegisterRequest struct {
+	Username string `json:"username" xml:"username" form:"username"`
+	Password string `json:"password" xml:"password" form:"password"`
+	Name     string `json:"name" xml:"name" form:"name"`
+}
+
+func TestBodyParser(t *testing.T) {
+	app.Post("/register", func(ctx *fiber.Ctx) error {
+		request := new(RegisterRequest)
+		err := ctx.BodyParser(request)
+		if err != nil {
+			return err
+		}
+
+		return ctx.SendString("Register Success "+request.Username)
+	})
+}
+
+
+func TestBodyParserJSON(t *testing.T) {
+	TestBodyParser(t)
+
+	body := strings.NewReader(`{"username":"Fajar","password":"rahasia","name":"Rama Fajar"}`)
+	request := 	httptest.NewRequest("POST", "/register", body)
+	request.Header.Set("Content-Type","application/json")
+	response, err := app.Test(request)
+	assert.Nil(t, err)
+	assert.Equal(t,200,response.StatusCode)
+
+	bytes, err := io.ReadAll(response.Body)
+	assert.Nil(t, err)
+	assert.Equal(t, "Register Success Fajar", string(bytes))
+}
+
+func TestBodyParserForm(t *testing.T) {
+	TestBodyParser(t)
+
+	body := strings.NewReader(`username=Fajar&password=rahasia&name=Rama+Fajar`)
+	request := 	httptest.NewRequest("POST", "/register", body)
+	request.Header.Set("Content-Type","application/x-www-form-urlencoded")
+	response, err := app.Test(request)
+	assert.Nil(t, err)
+	assert.Equal(t,200,response.StatusCode)
+
+	bytes, err := io.ReadAll(response.Body)
+	assert.Nil(t, err)
+	assert.Equal(t, "Register Success Fajar", string(bytes))
+}
+
+func TestBodyParserXML(t *testing.T) {
+	TestBodyParser(t)
+
+	body := strings.NewReader(`
+		<RegisterRequest>
+			<username>Fajar</username>
+			<password>rahasia</password>
+		</RegisterRequest>
+	`)
+	request := 	httptest.NewRequest("POST", "/register", body)
+	request.Header.Set("Content-Type","application/xml")
+	response, err := app.Test(request)
+	assert.Nil(t, err)
+	assert.Equal(t,200,response.StatusCode)
+
+	bytes, err := io.ReadAll(response.Body)
+	assert.Nil(t, err)
+	assert.Equal(t, "Register Success Fajar", string(bytes))
 }
