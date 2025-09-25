@@ -243,3 +243,38 @@ func TestBodyParserXML(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "Register Success Fajar", string(bytes))
 }
+
+func TestResponseJSON(t *testing.T) {
+	app.Get("/user", func(ctx *fiber.Ctx) error  {
+		return ctx.JSON(fiber.Map{
+			"username":"nullsec45",
+			"name":"Fajar",
+		})
+	})
+
+	request := 	httptest.NewRequest("GET", "/user",nil)
+	request.Header.Set("Accept","application/json")
+	response, err := app.Test(request)
+	assert.Nil(t, err)
+	assert.Equal(t,200,response.StatusCode)
+
+	bytes, err := io.ReadAll(response.Body)
+	assert.Nil(t, err)
+	assert.JSONEq(t, `{"username":"nullsec45","name":"Fajar"}`, string(bytes))
+}
+
+func TestDownloadFile(t *testing.T) {
+	app.Get("/download", func(ctx *fiber.Ctx) error  {
+		return ctx.Download("./source/example_upload.txt","upload.txt")
+	})
+
+	request := httptest.NewRequest("GET","/download",nil)
+	response, err := app.Test(request)
+	assert.Nil(t, err)
+	assert.Equal(t,200,response.StatusCode)
+	assert.Equal(t, "attachment; filename=\"upload.txt\"", response.Header.Get("Content-Disposition"))
+	bytes, err := io.ReadAll(response.Body)
+	assert.Nil(t, err)
+	assert.Equal(t, "This is sample file for upload", string(bytes))
+
+}
