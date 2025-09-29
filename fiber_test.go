@@ -12,9 +12,15 @@ import (
 	"bytes"
 	"mime/multipart"
 	"encoding/json"
+	"errors"
 )
 
-var app = fiber.New()
+var app = fiber.New(fiber.Config{
+	ErrorHandler:func(ctx *fiber.Ctx, err error) error {
+		ctx.Status(fiber.StatusInternalServerError)
+		return ctx.SendString("Error : "+err.Error())
+	},
+})
 
 func TestRoutingHelloWorld(t *testing.T) {
 	app := fiber.New()
@@ -277,4 +283,83 @@ func TestDownloadFile(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "This is sample file for upload", string(bytes))
 
+}
+
+func TestRoutingGroup(t *testing.T) {
+	helloWorld := func(ctx *fiber.Ctx) error {
+		return ctx.SendString("Hello World")
+	}
+
+	api := app.Group("/api")
+	api.Get("/hello", helloWorld)
+	api.Get("/world", helloWorld)
+
+	web := app.Group("/web")
+	web.Get("/hello", helloWorld)
+	web.Get("/world", helloWorld)
+
+	request := httptest.NewRequest("GET","/api/hello",nil)
+	response, err := app.Test(request)
+	assert.Nil(t, err)
+	assert.Equal(t,200,response.StatusCode)
+
+	bytes, err := io.ReadAll(response.Body)
+	assert.Nil(t, err)
+	assert.Equal(t, "Hello World", string(bytes))
+}
+
+func TestStatic(t *testing.T) {
+	app.Static("/public", "./source")
+
+	request := httptest.NewRequest("GET", "/public/contoh.txt", nil)
+	response, err := app.Test(request)
+	assert.Nil(t, err)
+	assert.Equal(t, 200, response.StatusCode)
+	bytes, err := io.ReadAll(response.Body)
+	assert.Nil(t, err)
+	assert.Equal(t, "contoh file yang ingin ditransfer", string(bytes))
+}
+
+func TestErrorHandling(t *testing.T) {
+	app.Get("/error", func(ctx *fiber.Ctx) error {
+		return errors.New("ups")
+	})
+
+	request := httptest.NewRequest("GET", "/error", nil)
+	response, err := app.Test(request)
+	assert.Nil(t, err)
+	assert.Equal(t, 500, response.StatusCode)
+	bytes, err := io.ReadAll(response.Body)
+	assert.Nil(t, err)
+	assert.Equal(t, "Error : ups", string(bytes))
+}
+
+var engine=mustache.New("./template",".mustache")
+
+var app = fiber.New(fiber.New(fiber.Config({
+	Views: engine,
+	ErrorHandler:func(ctx *fiber.Ctx, err error) error {
+		ctx.Status(fiber.StatusInternalServerError)
+		return ctx.SendString("Error : "+err.Error())
+	}
+})))
+
+func TestView(t *testing.T) {
+	app.Get("/view", func(ctx *fiber.Ctx) error {
+		return ctx.Render("hello", fiber.Map{
+			"title":"Hello Title",
+			"header":"Hello Header",
+			"content":"Hello Content",
+		})
+	})
+
+	request := httptest.NewRequest("GET", "/view", nil)
+	response, err := app.Test(request)
+	assert.Nil(t, err)
+	assert.Equal(t, 500, response.StatusCode)
+	bytes, err := io.ReadAll(response.Body)
+	assert.Nil(t, err)
+	assert.Contains(t, string(bytes), "Hello Title")
+	assert.Contains(t, string(bytes), "Hello Header")
+	assert.Contains(t, string(bytes), "Hello Content")
 }
