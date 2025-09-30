@@ -13,14 +13,24 @@ import (
 	"mime/multipart"
 	"encoding/json"
 	"errors"
+	"github.com/gofiber/template/mustache/v2"
+	"fmt"
 )
 
+var engine=mustache.New("./template",".mustache")
+
+
 var app = fiber.New(fiber.Config{
-	ErrorHandler:func(ctx *fiber.Ctx, err error) error {
-		ctx.Status(fiber.StatusInternalServerError)
-		return ctx.SendString("Error : "+err.Error())
-	},
+    Views: engine,
+    ErrorHandler: func(ctx *fiber.Ctx, err error) error {
+        code := fiber.StatusInternalServerError
+        if e, ok := err.(*fiber.Error); ok {
+            code = e.Code
+        }
+        return ctx.Status(code).SendString("Error: " + err.Error())
+    },
 })
+
 
 func TestRoutingHelloWorld(t *testing.T) {
 	app := fiber.New()
@@ -331,22 +341,12 @@ func TestErrorHandling(t *testing.T) {
 	assert.Equal(t, 500, response.StatusCode)
 	bytes, err := io.ReadAll(response.Body)
 	assert.Nil(t, err)
-	assert.Equal(t, "Error : ups", string(bytes))
+	assert.Equal(t, "Error: ups", string(bytes))
 }
-
-var engine=mustache.New("./template",".mustache")
-
-var app = fiber.New(fiber.New(fiber.Config({
-	Views: engine,
-	ErrorHandler:func(ctx *fiber.Ctx, err error) error {
-		ctx.Status(fiber.StatusInternalServerError)
-		return ctx.SendString("Error : "+err.Error())
-	}
-})))
 
 func TestView(t *testing.T) {
 	app.Get("/view", func(ctx *fiber.Ctx) error {
-		return ctx.Render("hello", fiber.Map{
+		return ctx.Render("index", fiber.Map{
 			"title":"Hello Title",
 			"header":"Hello Header",
 			"content":"Hello Content",
@@ -356,10 +356,24 @@ func TestView(t *testing.T) {
 	request := httptest.NewRequest("GET", "/view", nil)
 	response, err := app.Test(request)
 	assert.Nil(t, err)
-	assert.Equal(t, 500, response.StatusCode)
+	assert.Equal(t, 200, response.StatusCode)
 	bytes, err := io.ReadAll(response.Body)
+	fmt.Println(string(bytes))
 	assert.Nil(t, err)
 	assert.Contains(t, string(bytes), "Hello Title")
 	assert.Contains(t, string(bytes), "Hello Header")
 	assert.Contains(t, string(bytes), "Hello Content")
+}
+
+func TestClient(t *testing.T) {
+	client := fiber.AcquireClient()
+
+	agent := client.Get("http://example.com")
+	status, response, errors := agent.String()
+	assert.Nil(t, errors)
+	assert.Equal(t, 200, status)
+	assert.Contains(t, response, "Example Domain")
+
+	// fmt.Println(response)
+	defer fiber.ReleaseClient(client)
 }
